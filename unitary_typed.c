@@ -4,92 +4,55 @@
 
 #include "unitary_typed.h"
 
-enum node_fields
+void**
+list_node_get_field_previous
+( void* node )
 {
-	previous = 1,
+	return ( void** )( node + 0 );
+}
 
-	next,
-
-	content
-};
-
-void*
-list_node_get_field
-( void* node, int field )
+void**
+list_node_get_field_next
+( void* node )
 {
-	size_t offset;
-
-	if ( field == 1 )
-	{
-		offset = 0;
-	}
-
-	else if ( field == 2 )
-	{
-		offset = sizeof( void* );
-	}
-
-	else if ( field == 3 )
-	{
-		offset = 2 * sizeof( void* );
-	} 
-
-	return node + offset;
+	return ( void** )( node + sizeof( void* ) );
 }
 
 void*
-list_node_create
-( struct list *list )
+list_node_get_content
+( void* node )
 {
-	void* node = calloc( 1, list_get_node_size( list ) );
-
-	void** field;
-
-	enum node_fields field_name;
-
-	field_name = previous;
-
-	field = (void**)list_node_get_field( list->first_node, field_name );
-
-	*field = NULL;
-
-	field_name = next;
-
-	field = (void**)list_node_get_field( list->first_node, field_name );
-
-	*field = NULL;
-
-	return node;
+	return ( node + ( 2 * sizeof( void* ) ) );
 }
 
-int
+void
 list_node_connect
 ( void* node_1, void* node_2 )
 {
-	void** field;
+	void **field;
 
-	enum node_fields field_name;
+	if ( node_1 != NULL )
+	{
+		field = list_node_get_field_next( node_1 );
 
-	field_name = next;
+		*field = node_2;
+	}
 
-	field = list_node_get_field( node_1, field_name );
+	if ( node_2 != NULL )
+	{
+		field = list_node_get_field_previous( node_2 );
 
-	*field = node_2;
+		*field = node_1;
+	}
 
-	field_name = previous;
-
-	field = list_node_get_field( node_2, field_name );
-
-	*field = node_1;
-
-	return 0;
+	return;
 }
 
 size_t
 list_get_node_size
 ( struct list *list )
 {
-	return ( 2 * sizeof( void* ) ) + sizeof( unsigned int ) + list->element_size;
+	return ( ( 2 * sizeof( void* ) ) + list->element_size );
 }
 
 struct list*
@@ -100,35 +63,97 @@ list_create
 
 	list->element_size = size;
 
-	list->first_node = list_node_create( list );
-
-	//printf("Node adress:%p\nNode field adress: %p\n", list->first_node, node_field);
+	list->first_node = NULL;
 
 	return list;
 }
 
-int
+void
 list_destroy
 ( struct list *list )
 {
-	enum node_fields field_id = next;
+	void *nodes[] = { NULL, list->first_node };
 
-	void *previous_node = NULL;
-
-	void *current_node = list->first_node;
-
-	while ( current_node != NULL )
+	while ( nodes[1] != NULL )
 	{
-		previous_node = current_node;
+		nodes[0] = nodes[1];
 
-		current_node = *( void** )list_node_get_field( current_node, field_id );
+		nodes[1] = *list_node_get_field_next( nodes[0] );
 
-		free( previous_node );
+		free( nodes[0] );
 	}
 
 	free( list );
 
-	return 0;
+	return;
+}
+
+struct list*
+list_merge
+( struct list *list1, struct list *list2, int position )
+{
+	if ( list1 == NULL )
+	{
+		printf("Error on function [list_merge]. List to which will be merged is NULL.\n");
+
+		return NULL;
+	}
+
+	if ( list2 == NULL )
+	{
+		printf("Error on function [list_merge]. List that will be merged is NULL.\n");
+
+		return NULL;
+	}
+
+	if ( list1->element_size != list2->element_size )
+	{
+		printf("Error on function [list_merge]. Lists do not have the same element size.\n");
+
+		return NULL;
+	}
+
+	void *node = list1->first_node;
+
+	int current_position = 1;
+
+	while ( current_position < position && node != NULL )
+	{
+		node = *list_node_get_field_next( node );
+
+		current_position++;
+	}
+
+	if ( node == NULL )
+	{
+		return NULL;
+	}
+
+	void *neighbours[2] = { node, *list_node_get_field_next( node ) };
+
+	list_node_connect( neighbours[0], list2->first_node );
+
+	list_node_connect( list2->last_node, neighbours[1] );
+
+	return list1;
+}
+
+unsigned int
+list_get_length
+( struct list *list )
+{
+	unsigned int length = 0;
+
+	void *node = list->first_node;
+
+	while ( node != NULL )
+	{
+		node = *list_node_get_field_next( node );
+
+		length++;
+	}
+
+	return length;
 }
 
 void*
@@ -139,59 +164,57 @@ list_element_create
 
 	int current_position = 1;
 
-	enum node_fields field_name = next;
-
 	while ( current_position < position )
 	{
 		if ( nodes[1] == NULL )
 		{
-			nodes[1] = list_node_create( list );
+			nodes[1] = calloc( 1, list_get_node_size( list ) );
 
 			if ( nodes[1] == NULL )
 			{
+				printf("Error on function [list_element_create]. Could not create node.");
+
 				return NULL;
 			}
 
-			if ( nodes[0] != NULL )
-			{
-				list_node_connect( nodes[0], nodes[1] );
-			}
+			list_node_connect( nodes[0], nodes[1] );
+
+			list_node_connect( nodes[1], NULL );
 		}
 
 		nodes[0] = nodes[1];
 
-		nodes[1] = *( void** )list_node_get_field( nodes[0], field_name );
+		nodes[1] = *list_node_get_field_next( nodes[0] );
 
 		current_position++;
 	}
 
 	nodes[2] = nodes[1];
 
-	nodes[1] = list_node_create( list );
+	nodes[1] = calloc( 1, list_get_node_size( list ) );
 
 	if ( nodes[1] == NULL )
 	{
+		printf("Error on function [list_element_create]. Could not create node.");
+
 		return NULL;
 	}
 
-	if ( nodes[2] != NULL )
-	{
-		list_node_connect( nodes[1], nodes[2] );
-	}
+	list_node_connect( nodes[0], nodes[1] );
 
-	if ( nodes[0] != NULL )
-	{
-		list_node_connect( nodes[0], nodes[1] );
-	}
+	list_node_connect( nodes[1], nodes[2] );
 
-	else
+	if ( *list_node_get_field_previous( nodes[1] ) == NULL )
 	{
 		list->first_node = nodes[1];
 	}
 
-	field_name = content;
+	if ( *list_node_get_field_next( nodes[1] ) == NULL )
+	{
+		list->last_node = nodes[1];
+	}
 
-	return (void*)list_node_get_field( nodes[1], field_name );
+	return list_node_get_content( nodes[1] );
 }
 
 void*
@@ -202,11 +225,9 @@ list_element_get
 
 	int current_position = 1;
 
-	enum node_fields field_name = next;
-
 	while ( current_position < position && node != NULL )
 	{
-		node = *( void** )list_node_get_field( node, field_name );
+		node = *list_node_get_field_next( node );
 
 		current_position++;
 	}	
@@ -216,8 +237,38 @@ list_element_get
 		return NULL;
 	}
 
-	field_name = content;
+	return list_node_get_content( node );
+}
 
-	return (void*)list_node_get_field( node, field_name );
+int
+list_element_remove
+( struct list *list, int position )
+{
+	void *node = list->first_node;
+
+	int current_position = 1;
+
+	while ( current_position < position && node != NULL )
+	{
+		node = list_node_get_field_next( node );
+
+		current_position++;
+	}
+
+	if ( node == NULL )
+	{
+		return 1;
+	}
+
+	else
+	{
+		void *neighbours[2] = { *list_node_get_field_previous( node ), *list_node_get_field_next( node ) };
+
+		free( node );
+
+		list_node_connect( neighbours[0], neighbours[1] );
+
+		return 0;
+	}
 }
 

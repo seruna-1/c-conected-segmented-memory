@@ -3,6 +3,8 @@ struct list
 	unsigned int element_size;
 
 	void *first_node;
+
+	void *last_node;
 };
 
 size_t
@@ -13,8 +15,16 @@ struct list*
 list_create
 ( size_t size );
 
-int
+void
 list_destroy
+( struct list *list );
+
+struct list*
+list_merge
+( struct list *list1, struct list *list2, int position );
+
+unsigned int
+list_get_length
 ( struct list *list );
 
 void*
